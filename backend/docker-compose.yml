@@ -1,34 +1,28 @@
-# NumzTrak Fleet Management System - Docker Compose
-# Clean, well-documented architecture for development and production
+version: "3.9"
 
 services:
   # ===========================================
   # DATABASE LAYER
   # ===========================================
-  
+
   traccar-mysql:
     image: mysql:8.0
     container_name: numztrak-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-NumzTrak2025Root}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-traccar}
-      MYSQL_USER: ${MYSQL_USER:-traccar}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-traccar123}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: traccar
+      MYSQL_USER: traccar
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
-      - ../data/mysql:/var/lib/mysql
-      - ./scripts/init-database.sql:/docker-entrypoint-initdb.d/init-database.sql:ro
-    ports:
-      - "3306:3306"
+      - /opt/numztrak/mysql:/var/lib/mysql
     networks:
       - numztrak-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
       timeout: 20s
       retries: 10
-    labels:
-      - "numztrak.service=database"
-      - "numztrak.purpose=traccar-data"
 
   fuel-postgres:
     image: postgres:15-alpine
@@ -36,11 +30,9 @@ services:
     environment:
       POSTGRES_DB: numztrak_fuel
       POSTGRES_USER: numztrak
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-NumzFuel2025}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - ../data/fuel-postgres:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+      - /opt/numztrak/postgres:/var/lib/postgresql/data
     networks:
       - numztrak-network
     restart: unless-stopped
@@ -49,14 +41,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    labels:
-      - "numztrak.service=database"
-      - "numztrak.purpose=fuel-data"
 
   # ===========================================
   # CORE SERVICES
   # ===========================================
-  
+
   traccar-server:
     image: traccar/traccar:latest
     container_name: numztrak-traccar
@@ -66,50 +55,44 @@ services:
     ports:
       - "8082:8082"
       - "8443:8443"
-      # Specific GPS protocol ports only (reduced to avoid Windows port conflicts)
-      # TCP only - UDP can be added later if needed
-      # Covers protocols: OsmAnd(5055), GPS103(5001), TK103(5002), GL200(5003), T55(5005), Teltonika(5006), Meiligao(5009), H02(5013), GPSGate(5020)
-      - "5001:5001"      # GPS103
-      - "5002:5002"      # TK103
-      - "5003:5003"      # GL200
-      - "5005:5005"      # T55
-      - "5006:5006"      # Teltonika
-      - "5009:5009"      # Meiligao
-      - "5013:5013"      # H02
-      - "5020:5020"      # GPSGate
-      - "5055:5055"      # OsmAnd (HTTP)
+      - "5001:5001"
+      - "5002:5002"
+      - "5003:5003"
+      - "5005:5005"
+      - "5006:5006"
+      - "5009:5009"
+      - "5013:5013"
+      - "5020:5020"
+      - "5055:5055"
     volumes:
-      - ../data/traccar/logs:/opt/traccar/logs
+      - /opt/numztrak/traccar/logs:/opt/traccar/logs
       - ./conf/traccar.xml:/opt/traccar/conf/traccar.xml:ro
       - ./cert.pem:/opt/traccar/conf/cert.pem:ro
       - ./key.pem:/opt/traccar/conf/key.pem:ro
     environment:
-      TRACCAR_DATABASE_URL: jdbc:mysql://traccar-mysql:3306/${MYSQL_DATABASE:-traccar}?useSSL=false&allowPublicKeyRetrieval=true
-      TRACCAR_DATABASE_USER: ${MYSQL_USER:-traccar}
-      TRACCAR_DATABASE_PASSWORD: ${MYSQL_PASSWORD:-traccar123}
+      TRACCAR_DATABASE_URL: jdbc:mysql://traccar-mysql:3306/traccar?useSSL=false&allowPublicKeyRetrieval=true
+      TRACCAR_DATABASE_USER: traccar
+      TRACCAR_DATABASE_PASSWORD: ${MYSQL_PASSWORD}
     networks:
       - numztrak-network
     restart: unless-stopped
-    labels:
-      - "numztrak.service=core"
-      - "numztrak.purpose=gps-tracking"
 
   fuel-api:
-    build: ../fuel-api
+    image: numztrak/fuel-api:latest
     container_name: numztrak-fuel-api
     ports:
       - "3001:3001"
     environment:
-      DATABASE_URL: postgresql://numztrak:${POSTGRES_PASSWORD:-NumzFuel2025}@fuel-postgres:5432/numztrak_fuel
+      DATABASE_URL: postgresql://numztrak:${POSTGRES_PASSWORD}@fuel-postgres:5432/numztrak_fuel
       TRACCAR_MYSQL_HOST: traccar-mysql
       TRACCAR_MYSQL_PORT: 3306
-      TRACCAR_MYSQL_DATABASE: ${MYSQL_DATABASE:-traccar}
-      TRACCAR_MYSQL_USER: ${MYSQL_USER:-traccar}
-      TRACCAR_MYSQL_PASSWORD: ${MYSQL_PASSWORD:-traccar123}
+      TRACCAR_MYSQL_DATABASE: traccar
+      TRACCAR_MYSQL_USER: traccar
+      TRACCAR_MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      NODE_ENV: production
       PORT: 3001
-      NODE_ENV: development
-      SESSION_SECRET: NumzTrak2025FuelSecret
-      CORS_ORIGIN: http://localhost:3002
+      SESSION_SECRET: ${SESSION_SECRET}
+      CORS_ORIGIN: https://your-domain.com
     depends_on:
       fuel-postgres:
         condition: service_healthy
@@ -118,49 +101,11 @@ services:
     networks:
       - numztrak-network
     restart: unless-stopped
-    labels:
-      - "numztrak.service=api"
-      - "numztrak.purpose=fuel-management"
 
   # ===========================================
-  # FRONTEND SERVICES
+  # GATEWAY / REVERSE PROXY
   # ===========================================
-  
-  numztrak-frontend:
-    build:
-      context: ../traccar-fleet-system/frontend
-      dockerfile: Dockerfile.dev
-    container_name: numztrak-frontend
-    ports:
-      - "3002:3002"
-    volumes:
-      - ../traccar-fleet-system/frontend/src:/app/src
-      - ../traccar-fleet-system/frontend/public:/app/public
-      - ../traccar-fleet-system/frontend/index.html:/app/index.html
-      - ../traccar-fleet-system/frontend/vite.config.js:/app/vite.config.js
-    environment:
-      - NODE_ENV=development
-      - VITE_HMR_HOST=${VITE_HMR_HOST:-localhost}
-      - VITE_HMR_PORT=${VITE_HMR_PORT:-3002}
-      - VITE_HMR_EXTERNAL=${VITE_HMR_EXTERNAL:-}
-    depends_on:
-      fuel-api:
-        condition: service_started
-      traccar-server:
-        condition: service_started
-    networks:
-      - numztrak-network
-    restart: on-failure:3
-    stdin_open: true
-    tty: true
-    labels:
-      - "numztrak.service=frontend"
-      - "numztrak.purpose=web-dashboard"
 
-  # ===========================================
-  # GATEWAY & PROXY
-  # ===========================================
-  
   numztrak-nginx:
     image: nginx:alpine
     container_name: numztrak-nginx
@@ -172,36 +117,16 @@ services:
       - ./cert.pem:/etc/nginx/ssl/cert.pem:ro
       - ./key.pem:/etc/nginx/ssl/key.pem:ro
     depends_on:
-      numztrak-frontend:
-        condition: service_started
-      traccar-server:
-        condition: service_started
+      - traccar-server
+      - fuel-api
     networks:
       - numztrak-network
-    restart: on-failure:3
-    labels:
-      - "numztrak.service=gateway"
-      - "numztrak.purpose=api-routing"
+    restart: unless-stopped
 
 # ===========================================
-# NETWORKS
+# NETWORK
 # ===========================================
+
 networks:
   numztrak-network:
     driver: bridge
-    name: numztrak-network
-    labels:
-      - "numztrak.network=main"
-
-# ===========================================
-# VOLUMES
-# ===========================================
-# Note: Services use bind mounts (../data/...) instead of named volumes
-# Named volumes are kept here for future use if needed
-# volumes:
-#   mysql-data:
-#     name: numztrak-mysql-data
-#   traccar-logs:
-#     name: numztrak-traccar-logs
-#   fuel-postgres-data:
-#     name: numztrak-fuel-postgres-data
