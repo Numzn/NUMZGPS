@@ -1,4 +1,15 @@
-<!-- a9940c28-5f99-4b98-b599-c5e6fc4bf548 c6d871ae-ebe2-497c-972e-6b4c60011ca8 -->
+---
+name: Fuel API Backend Integration Plan
+overview: ""
+todos:
+  - id: e883b6ac-4f9a-4b70-9edd-656f6d3aba01
+    content: Add socket.io-client to package.json dependencies
+    status: pending
+  - id: b9b8262f-8e30-4713-a448-56bdeecb0578
+    content: Restart the numztrak-frontend container to apply changes
+    status: pending
+---
+
 # Fuel API Backend Integration Plan
 
 ## Overview
@@ -243,8 +254,3 @@ Provide examples for:
 
 7. ✅ **VERIFY**: `backend/nginx.conf` - Routing is correct
 8. ✅ **VERIFY**: `fuel-api/src/middleware/auth.js` - Auth methods work
-
-### To-dos
-
-- [ ] Add socket.io-client to package.json dependencies
-- [ ] Restart the numztrak-frontend container to apply changes

@@ -499,3 +499,7 @@ docker exec -it numztrak-frontend sh
 **Docker Compose Version**: 3.8+  
 **Docker Engine**: 20.10+
 
+
+
+
+
