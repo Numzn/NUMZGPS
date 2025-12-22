@@ -1,0 +1,15 @@
+# Netlify configuration for deploying only the frontend
+[build]
+  base = "traccar-fleet-system/frontend"
+  publish = "dist"
+  command = "npm install && npm run build"
+
+# Optional: ignore backend and other folders
+[build.environment]
+  NODE_VERSION = "18"
+
+# Redirect all requests to index.html (for React Router)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
