@@ -1,0 +1,181 @@
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { Box } from '@mui/material';
+import { makeStyles } from 'tss-react/mui';
+import { useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
+import { devicesActions } from '../store';
+import usePersistedState from '../common/util/usePersistedState';
+import EventsDrawer from './EventsDrawer';
+import useFilter from './useFilter';
+import MainMap from './MainMap';
+import DeviceList from './DeviceList';
+import BottomMenu from '../common/components/BottomMenu';
+import MapTopbar from './components/MapTopbar';
+import DeviceDropdown from './components/DeviceDropdown';
+import MapDevicePopup from './components/MapDevicePopup';
+import { useAttributePreference } from '../common/util/preferences';
+
+const useStyles = makeStyles()((theme) => ({
+  root: {
+    height: '100vh',
+    display: 'flex',
+    flexDirection: 'column',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  mapContainer: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    width: '100%',
+    height: '100%',
+    minHeight: 0, // Allow flexbox to properly size
+    paddingBottom: 0, // No padding needed, controls handle their own positioning
+  },
+}));
+
+const MainPage = () => {
+  const { classes } = useStyles();
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const desktop = useMediaQuery(useTheme().breakpoints.up('md'));
+
+  const selectedDeviceId = useSelector((state) => state.devices.selectedId);
+  const positions = useSelector((state) => state.session.positions);
+  const devices = useSelector((state) => state.devices.items);
+  const [filteredPositions, setFilteredPositions] = useState([]);
+  const selectedPosition = filteredPositions.find((position) => selectedDeviceId && position.deviceId === selectedDeviceId);
+
+  const [filteredDevices, setFilteredDevices] = useState([]);
+  const [keyword, setKeyword] = useState('');
+  const [filter, setFilter] = usePersistedState('filter', {
+    statuses: [],
+    groups: [],
+  });
+  const [filterSort, setFilterSort] = usePersistedState('filterSort', '');
+  const [filterMap, setFilterMap] = usePersistedState('filterMap', false);
+
+  // New state for topbar components
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerPinned, setDrawerPinned] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  
+  const devicesButtonRef = useRef(null);
+
+  const onEventsClick = useCallback(() => setEventsOpen(true), [setEventsOpen]);
+
+  const handleDashboardClick = useCallback(() => {
+    navigate('/');
+  }, [navigate]);
+
+  useFilter(keyword, filter, filterSort, filterMap, positions, setFilteredDevices, setFilteredPositions);
+
+  // Auto-open drawer when device is selected
+  useEffect(() => {
+    if (selectedDeviceId) {
+      setDrawerOpen(true);
+    }
+  }, [selectedDeviceId]);
+
+  // Calculate device statistics
+  const deviceStats = React.useMemo(() => {
+    const total = Object.values(devices).length;
+    const online = Object.values(devices).filter(d => d.status === 'online').length;
+    const moving = Object.values(positions).filter(p => p.speed > 0).length;
+    const idling = online - moving;
+    const offline = Object.values(devices).filter(d => d.status === 'offline').length;
+
+    return { total, online, moving, idling, offline };
+  }, [devices, positions]);
+
+  // Event handlers
+  const handleDeviceSelect = useCallback((device) => {
+    dispatch(devicesActions.selectId(device.id));
+  }, [dispatch]);
+
+  const handleDevicesClick = useCallback(() => {
+    setDropdownOpen(!dropdownOpen);
+  }, [dropdownOpen]);
+
+  const handleDrawerToggle = useCallback(() => {
+    setDrawerOpen(!drawerOpen);
+  }, [drawerOpen]);
+
+  const handleViewAllDevices = useCallback(() => {
+    setDropdownOpen(false);
+    setDrawerOpen(true);
+  }, []);
+
+  const handleAddDevice = useCallback(() => {
+    navigate('/settings/device');
+  }, [navigate]);
+
+  const handleClosePopup = useCallback(() => {
+    dispatch(devicesActions.selectId(null));
+  }, [dispatch]);
+
+  return (
+    <Box className={classes.root}>
+      {/* Topbar */}
+      <MapTopbar
+        keyword={keyword}
+        onKeywordChange={setKeyword}
+        filter={filter}
+        onFilterChange={setFilter}
+        filterSort={filterSort}
+        onFilterSortChange={setFilterSort}
+        filterMap={filterMap}
+        onFilterMapChange={setFilterMap}
+        onFilterClick={() => setFilterOpen(!filterOpen)}
+        onDevicesClick={handleDevicesClick}
+        onAddDevice={handleAddDevice}
+        onDashboardClick={handleDashboardClick}
+        deviceStats={deviceStats}
+        hasActiveFilters={filter.statuses?.length > 0 || filter.groups?.length > 0 || filterSort || filterMap}
+      />
+
+      {/* Device Dropdown */}
+      <DeviceDropdown
+        open={dropdownOpen}
+        anchorEl={devicesButtonRef.current}
+        onClose={() => setDropdownOpen(false)}
+        onViewAll={handleViewAllDevices}
+        devices={filteredDevices}
+        onDeviceSelect={handleDeviceSelect}
+        keyword={keyword}
+      />
+
+      {/* Map Container */}
+      <Box className={classes.mapContainer}>
+        <MainMap
+          filteredPositions={filteredPositions}
+          selectedPosition={selectedPosition}
+          onEventsClick={() => setEventsOpen(true)}
+          devicesOpen={drawerOpen}
+          sidebarCollapsed={!drawerPinned}
+        />
+        
+        {/* Device Popup */}
+        {selectedDeviceId && selectedPosition && devices[selectedDeviceId] && (
+          <MapDevicePopup
+            device={devices[selectedDeviceId]}
+            position={selectedPosition}
+            onClose={handleClosePopup}
+            initialPosition={{ x: 100, y: 100 }}
+          />
+        )}
+      </Box>
+
+      {/* Bottom Menu for Mobile */}
+      {!desktop && (
+        <BottomMenu />
+      )}
+    </Box>
+  );
+};
+
+export default MainPage;

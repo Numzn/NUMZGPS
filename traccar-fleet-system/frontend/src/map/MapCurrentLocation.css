@@ -1,0 +1,25 @@
+/* Geolocate button is now inside the navigation control group */
+/* It will inherit all styling from .maplibregl-ctrl-group button */
+/* Only add custom styling for active/tracking state */
+
+/* Ensure button is always enabled and clickable */
+.maplibregl-ctrl-group button.maplibregl-ctrl-geolocate {
+  cursor: pointer !important;
+  pointer-events: auto !important;
+}
+
+/* Active/tracking state - subtle highlight when tracking location */
+.maplibregl-ctrl-group button.maplibregl-ctrl-geolocate-active {
+  background-color: #06b6d4 !important;
+}
+
+.maplibregl-ctrl-group button.maplibregl-ctrl-geolocate-active:hover {
+  background-color: #0891b2 !important;
+}
+
+/* Disabled state visual (but button still works) */
+.maplibregl-ctrl-group button.maplibregl-ctrl-geolocate-disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+

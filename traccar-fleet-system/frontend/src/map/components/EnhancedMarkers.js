@@ -1,0 +1,404 @@
+import { useId, useCallback, useEffect } from 'react';
+import { useSelector } from 'react-redux';
+import { useMediaQuery } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import { map } from '../core/MapView';
+import { formatTime, getStatusColor } from '../../common/util/formatter';
+import { mapIconKey } from '../core/preloadImages';
+import { useAttributePreference } from '../../common/util/preferences';
+import { useCatchCallback } from '../../reactHelper';
+import { findFonts } from '../core/mapUtil';
+
+const EnhancedMarkers = ({ 
+  positions, 
+  onMapClick, 
+  onMarkerClick, 
+  showStatus, 
+  selectedPosition, 
+  titleField 
+}) => {
+  const id = useId();
+  const clusters = `${id}-clusters`;
+  const selected = `${id}-selected`;
+  const hovered = `${id}-hovered`;
+
+  // Ensure positions is always an array
+  const safePositions = positions || [];
+
+  const theme = useTheme();
+  const desktop = useMediaQuery(theme.breakpoints.up('md'));
+  const iconScale = useAttributePreference('iconScale', desktop ? 0.8 : 1.0);
+
+  const devices = useSelector((state) => state.devices.items);
+  const selectedDeviceId = useSelector((state) => state.devices.selectedId);
+
+  const mapCluster = useAttributePreference('mapCluster', true);
+  const directionType = useAttributePreference('mapDirection', 'selected');
+
+  const createFeature = (devices, position, selectedPositionId) => {
+    const device = devices[position.deviceId];
+    let showDirection;
+    switch (directionType) {
+      case 'none':
+        showDirection = false;
+        break;
+      case 'all':
+        showDirection = position.course > 0;
+        break;
+      default:
+        showDirection = selectedPositionId === position.id && position.course > 0;
+        break;
+    }
+
+    // Enhanced status detection
+    const isOnline = device?.status === 'online';
+    const isMoving = position.speed > 0;
+    const isSelected = selectedPositionId === position.id;
+    
+    return {
+      id: position.id,
+      deviceId: position.deviceId,
+      name: device?.name || 'Unknown Device',
+      fixTime: formatTime(position.fixTime, 'seconds'),
+      category: mapIconKey(device?.category),
+      color: showStatus ? position.attributes?.color || getStatusColor(device?.status) : 'neutral',
+      rotation: position.course,
+      direction: showDirection,
+      // Enhanced properties
+      isOnline,
+      isMoving,
+      isSelected,
+      speed: position.speed || 0,
+      course: position.course || 0,
+      lastUpdate: position.fixTime,
+    };
+  };
+
+  // Enhanced mouse interactions
+  const onMouseEnter = useCallback((event) => {
+    map.getCanvas().style.cursor = 'pointer';
+    
+    // Add hover effect
+    const features = event.features;
+    if (features.length > 0) {
+      const feature = features[0];
+      map.setFilter(hovered, ['==', 'deviceId', feature.properties.deviceId]);
+    }
+  }, [hovered]);
+
+  const onMouseLeave = useCallback(() => {
+    map.getCanvas().style.cursor = '';
+    map.setFilter(hovered, ['==', 'deviceId', '']);
+  }, [hovered]);
+
+  const onMapClickCallback = useCallback((event) => {
+    if (!event.defaultPrevented && onMapClick) {
+      onMapClick(event.lngLat.lat, event.lngLat.lng);
+    }
+  }, [onMapClick]);
+
+  const onMarkerClickCallback = useCallback((event) => {
+    event.preventDefault();
+    const feature = event.features[0];
+    if (onMarkerClick) {
+      onMarkerClick(feature.properties.id, feature.properties.deviceId);
+    }
+  }, [onMarkerClick]);
+
+  const onClusterClick = useCatchCallback(async (event) => {
+    event.preventDefault();
+    const features = map.queryRenderedFeatures(event.point, {
+      layers: [clusters],
+    });
+    const clusterId = features[0].properties.cluster_id;
+    const zoom = await map.getSource(id).getClusterExpansionZoom(clusterId);
+    map.easeTo({
+      center: features[0].geometry.coordinates,
+      zoom,
+      duration: 1000,
+    });
+  }, [clusters]);
+
+  useEffect(() => {
+    // Add sources
+    map.addSource(id, {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: [],
+      },
+      cluster: mapCluster,
+      clusterMaxZoom: 14,
+      clusterRadius: 50,
+    });
+    
+    map.addSource(selected, {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: [],
+      },
+    });
+
+    map.addSource(hovered, {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: [],
+      },
+    });
+
+    // Enhanced marker layers with better styling
+    [id, selected].forEach((source) => {
+      // Main marker layer
+      map.addLayer({
+        id: source,
+        type: 'symbol',
+        source,
+        filter: ['!has', 'point_count'],
+        layout: {
+          'icon-image': '{category}-{color}',
+          'icon-size': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            0, iconScale * 0.6,
+            10, iconScale * 0.8,
+            15, iconScale * 1.0,
+            20, iconScale * 1.2
+          ],
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'text-field': `{${titleField || 'name'}}`,
+          'text-allow-overlap': true,
+          'text-anchor': 'bottom',
+          'text-offset': [0, -2 * iconScale],
+          'text-font': findFonts(map),
+          'text-size': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            0, 10,
+            10, 12,
+            15, 14,
+            20, 16
+          ],
+          'text-optional': true,
+        },
+        paint: {
+          'text-halo-color': 'rgba(255, 255, 255, 0.8)',
+          'text-halo-width': 2,
+          'text-halo-blur': 1,
+        },
+      });
+
+      // Status indicator layer
+      map.addLayer({
+        id: `status-${source}`,
+        type: 'circle',
+        source,
+        filter: ['!has', 'point_count'],
+        paint: {
+          'circle-radius': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            0, 3,
+            10, 4,
+            15, 5,
+            20, 6
+          ],
+          'circle-color': [
+            'case',
+            ['==', ['get', 'isOnline'], true],
+            '#4caf50', // Green for online
+            '#f44336', // Red for offline
+            '#9e9e9e'  // Gray for unknown
+          ],
+          'circle-stroke-width': 2,
+          'circle-stroke-color': 'white',
+          'circle-opacity': 0.9,
+        },
+      });
+
+      // Direction layer
+      map.addLayer({
+        id: `direction-${source}`,
+        type: 'symbol',
+        source,
+        filter: [
+          'all',
+          ['!has', 'point_count'],
+          ['==', 'direction', true],
+        ],
+        layout: {
+          'icon-image': 'direction',
+          'icon-size': iconScale * 0.8,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'icon-rotate': ['get', 'rotation'],
+          'icon-rotation-alignment': 'map',
+        },
+      });
+
+      // Speed indicator for moving vehicles (using direction icon as fallback)
+      map.addLayer({
+        id: `speed-${source}`,
+        type: 'symbol',
+        source,
+        filter: [
+          'all',
+          ['!has', 'point_count'],
+          ['>', ['get', 'speed'], 0],
+        ],
+        layout: {
+          'icon-image': 'direction', // Use existing direction icon instead of non-existent speed-indicator
+          'icon-size': iconScale * 0.4,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'icon-offset': [0, -1.5 * iconScale],
+        },
+      });
+
+      // Event handlers
+      map.on('mouseenter', source, onMouseEnter);
+      map.on('mouseleave', source, onMouseLeave);
+      map.on('click', source, onMarkerClickCallback);
+    });
+
+    // Enhanced cluster layer
+    map.addLayer({
+      id: clusters,
+      type: 'symbol',
+      source: id,
+      filter: ['has', 'point_count'],
+      layout: {
+        'icon-image': 'background',
+        'icon-size': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          0, iconScale * 0.8,
+          10, iconScale * 1.0,
+          15, iconScale * 1.2,
+          20, iconScale * 1.4
+        ],
+        'text-field': '{point_count_abbreviated}',
+        'text-font': findFonts(map),
+        'text-size': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          0, 12,
+          10, 14,
+          15, 16,
+          20, 18
+        ],
+        'text-anchor': 'center',
+        'text-allow-overlap': true,
+      },
+      paint: {
+        'text-halo-color': 'white',
+        'text-halo-width': 2,
+      },
+    });
+
+    // Hovered marker layer
+    map.addLayer({
+      id: hovered,
+      type: 'circle',
+      source: hovered,
+      paint: {
+        'circle-radius': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          0, 8,
+          10, 12,
+          15, 16,
+          20, 20
+        ],
+        'circle-color': 'rgba(6, 182, 212, 0.3)',
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#06b6d4',
+        'circle-opacity': 0.8,
+      },
+    });
+
+    // Event handlers
+    map.on('mouseenter', clusters, onMouseEnter);
+    map.on('mouseleave', clusters, onMouseLeave);
+    map.on('click', clusters, onClusterClick);
+    map.on('click', onMapClickCallback);
+
+    return () => {
+      // Cleanup
+      map.off('mouseenter', clusters, onMouseEnter);
+      map.off('mouseleave', clusters, onMouseLeave);
+      map.off('click', clusters, onClusterClick);
+      map.off('click', onMapClickCallback);
+
+      if (map.getLayer(clusters)) {
+        map.removeLayer(clusters);
+      }
+      if (map.getLayer(hovered)) {
+        map.removeLayer(hovered);
+      }
+
+      [id, selected].forEach((source) => {
+        map.off('mouseenter', source, onMouseEnter);
+        map.off('mouseleave', source, onMouseLeave);
+        map.off('click', source, onMarkerClickCallback);
+
+        ['', 'status-', 'direction-', 'speed-'].forEach((prefix) => {
+          const layerId = prefix + source;
+          if (map.getLayer(layerId)) {
+            map.removeLayer(layerId);
+          }
+        });
+        
+        if (map.getSource(source)) {
+          map.removeSource(source);
+        }
+      });
+      
+      if (map.getSource(hovered)) {
+        map.removeSource(hovered);
+      }
+    };
+  }, [mapCluster, clusters, onMarkerClickCallback, onClusterClick, onMouseEnter, onMouseLeave]);
+
+  // Update marker data
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[EnhancedMarkers] Updating with', safePositions.length, 'positions');
+    }
+    
+    [id, selected].forEach((source) => {
+      const features = safePositions
+        .filter((it) => devices.hasOwnProperty(it.deviceId))
+        .filter((it) => (source === id ? it.deviceId !== selectedDeviceId : it.deviceId === selectedDeviceId))
+        .map((position) => ({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [position.longitude, position.latitude],
+          },
+          properties: createFeature(devices, position, selectedPosition && selectedPosition.id),
+        }));
+        
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[EnhancedMarkers] ${source}: ${features.length} features`);
+      }
+      map.getSource(source)?.setData({
+        type: 'FeatureCollection',
+        features,
+      });
+    });
+  }, [safePositions, devices, selectedDeviceId, selectedPosition]);
+
+  return null;
+};
+
+export default EnhancedMarkers;
+
