@@ -39,7 +39,16 @@ const SocketController = () => {
     }
     if (events.some((e) => soundEvents.includes(e.type)
         || (e.type === 'alarm' && soundAlarms.includes(e.attributes.alarm)))) {
-      new Audio(alarm).play();
+      const audio = new Audio(alarm);
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          // Safely ignore AbortError when play is interrupted
+          if (err.name !== 'AbortError') {
+            console.warn('Audio playback failed:', err);
+          }
+        });
+      }
     }
     setNotifications(events.map((event) => ({
       id: event.id,
