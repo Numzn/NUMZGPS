@@ -168,74 +168,7 @@ export default defineConfig(() => {
   plugins: [
     svgr(),
     react(),
-    VitePWA({
-      includeAssets: ['NUMZLOGO.png', 'apple-touch-icon-180x180.png'],
-      strategies: 'generateSW', // Generate service worker with workbox
-      // Enable service worker in development mode
-      // DISABLED: Service worker causes ERR_EMPTY_RESPONSE in dev mode
-      // Re-enable for production testing if needed
-      devOptions: {
-        enabled: false, // Disabled to prevent ERR_EMPTY_RESPONSE in development
-        type: 'module',
-        navigateFallback: 'index.html',
-      },
-      // Register service worker automatically
-      registerType: 'autoUpdate',
-      workbox: {
-        navigateFallbackDenylist: [/^\/api/],
-        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
-        globPatterns: ['**/*.{js,css,html,woff,woff2,mp3,png,svg,ico}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
-              },
-            },
-          },
-        ],
-        // Inject our custom push notification handlers
-        importScripts: ['/sw-push.js'], // Custom push notification handlers
-      },
-      manifest: {
-        short_name: 'NUMZTRAK',
-        name: 'NUMZTRAK - Professional Fleet Management',
-        description: 'Real-time fuel request management for fleet operations',
-        theme_color: '#0A2540',
-        background_color: '#ffffff',
-        display: 'standalone',
-        orientation: 'portrait-primary',
-        start_url: '/',
-        scope: '/',
-        icons: [
-          {
-            src: '/pwa-64x64.png',
-            sizes: '64x64',
-            type: 'image/png',
-            purpose: 'any',
-          },
-          {
-            src: '/pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any',
-          },
-          {
-            src: '/pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable',
-          },
-        ],
-        categories: ['business', 'productivity', 'utilities'],
-      },
-      // Disable manifest injection in HTML if commented out
-      injectManifest: false,
-    }),
+    // VitePWA is disabled to prevent service worker and PWA caching issues
     viteStaticCopy({
       targets: [
         { src: 'node_modules/@mapbox/mapbox-gl-rtl-text/dist/mapbox-gl-rtl-text.js', dest: '' },
