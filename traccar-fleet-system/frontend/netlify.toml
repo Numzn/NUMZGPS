@@ -8,15 +8,17 @@
 
 [build]
   # Build command
-  command = "npm run build"
+  command = "npm ci && npm run build"
   
   # Directory with built static files
   publish = "dist"
   
   # Build environment
   [build.environment]
-    NODE_VERSION = "18"
-    NPM_VERSION = "9"
+    NODE_VERSION = "20"
+    NPM_VERSION = "10"
+    # Don't set NODE_ENV=production during build - let Vite handle it
+    VITE_API_BASE_URL = "https://api.numz.site"
 
 # =========================================================================
 # Custom Domain Configuration
@@ -73,12 +75,10 @@
 # =========================================================================
 [context.production]
   [context.production.environment]
-    NODE_ENV = "production"
     VITE_API_BASE_URL = "https://api.numz.site"
 
 [context.branch-deploy]
   [context.branch-deploy.environment]
-    NODE_ENV = "production"
     VITE_API_BASE_URL = "https://api.numz.site"
 
 # =========================================================================
