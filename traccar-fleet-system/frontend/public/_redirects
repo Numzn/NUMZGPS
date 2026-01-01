@@ -1,6 +1,7 @@
 # Netlify Redirects for API Proxy
 # Proxy all /api/* requests to Oracle Cloud backend
 # This allows the frontend to use relative URLs like /api/server
+# Using HTTP temporarily due to self-signed SSL certificate (upgrade to Let's Encrypt later)
 
-/api/*  https://api.numz.site/api/:splat  200
-/socket.io/*  https://api.numz.site/socket.io/:splat  200
+/api/*  http://129.151.163.95/api/:splat  200
+/socket.io/*  http://129.151.163.95/socket.io/:splat  200
