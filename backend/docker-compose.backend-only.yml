@@ -126,8 +126,8 @@ services:
       NODE_ENV: production
       PORT: 3001
       SESSION_SECRET: ${SESSION_SECRET:-change_me_in_production}
-      # CORS - Netlify frontend URL
-      CORS_ORIGIN: ${CORS_ORIGIN:-https://your-netlify-domain.netlify.app}
+      # CORS - Allow Netlify preview and custom domain (comma-separated)
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://app.numz.site,https://rad-cactus-ca0409.netlify.app}
       # Optional: for external Traccar connections
       TRACCAR_SERVER_URL: ${TRACCAR_SERVER_URL:-http://traccar-server:8082}
     networks:

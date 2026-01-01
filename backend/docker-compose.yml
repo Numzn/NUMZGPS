@@ -91,8 +91,9 @@ services:
       TRACCAR_MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       NODE_ENV: production
       PORT: 3001
-      SESSION_SECRET: ${SESSION_SECRET}
-      CORS_ORIGIN: https://your-domain.com
+    SESSION_SECRET: ${SESSION_SECRET}
+    # Allow Netlify preview and custom app domain (comma-separated)
+    CORS_ORIGIN: https://app.numz.site,https://rad-cactus-ca0409.netlify.app
     depends_on:
       fuel-postgres:
         condition: service_healthy
