@@ -1,29 +1,48 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import svgr from 'vite-plugin-svgr';
 import { VitePWA } from 'vite-plugin-pwa';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  // Load env file based on `mode` in the current working directory.
+  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
+  const env = loadEnv(mode, process.cwd(), '');
+  
   // Allow configurable HMR host for mobile device access
   // Set VITE_HMR_EXTERNAL env var to your host IP (e.g., 10.152.184.242) for mobile access
   // If not set, defaults to 'localhost' for local development
   // Use process.env in config file (import.meta.env is for runtime, not config time)
-  const hmrHost = process.env.VITE_HMR_EXTERNAL || process.env.VITE_HMR_HOST || 'localhost';
-  const hmrPort = process.env.VITE_HMR_PORT || 3002;
+  const hmrHost = env.VITE_HMR_EXTERNAL || env.VITE_HMR_HOST || 'localhost';
+  const hmrPort = env.VITE_HMR_PORT || 3002;
 
-  // Detect if running locally (not in Docker)
-  // Set LOCAL_DEV=true to use localhost URLs for backend services
-  // This allows frontend to run locally while backend services run in Docker
-  const isLocalDev = process.env.LOCAL_DEV === 'true';
-  const traccarUrl = isLocalDev ? 'http://localhost:8082' : 'http://traccar-server:8082';
-  const fuelApiUrl = isLocalDev ? 'http://localhost:3001' : 'http://fuel-api:3001';
-
-  if (isLocalDev) {
+  // Detect environment mode
+  const isLocalDev = env.LOCAL_DEV === 'true';
+  const isProd = mode === 'production';
+  const apiBaseUrl = env.VITE_API_BASE_URL || 'http://localhost';
+  
+  // Determine backend URLs based on environment
+  let traccarUrl, fuelApiUrl;
+  
+  if (isProd) {
+    // Production (Netlify) - use environment variables
+    traccarUrl = `${apiBaseUrl}/api/traccar`;
+    fuelApiUrl = `${apiBaseUrl}/api/fuel`;
+    console.log('🌐 [Vite] Running in PRODUCTION mode (Netlify)');
+    console.log(`   API Base: ${apiBaseUrl}`);
+    console.log(`   Traccar: ${traccarUrl}`);
+    console.log(`   Fuel API: ${fuelApiUrl}`);
+  } else if (isLocalDev) {
+    // Local development
+    traccarUrl = 'http://localhost:8082';
+    fuelApiUrl = 'http://localhost:3001';
     console.log('🔧 [Vite] Running in LOCAL development mode');
     console.log(`   Traccar: ${traccarUrl}`);
     console.log(`   Fuel API: ${fuelApiUrl}`);
   } else {
+    // Docker development
+    traccarUrl = 'http://traccar-server:8082';
+    fuelApiUrl = 'http://fuel-api:3001';
     console.log('🐳 [Vite] Running in DOCKER mode');
     console.log(`   Traccar: ${traccarUrl}`);
     console.log(`   Fuel API: ${fuelApiUrl}`);
@@ -168,7 +187,74 @@ export default defineConfig(() => {
   plugins: [
     svgr(),
     react(),
-    // VitePWA is disabled to prevent service worker and PWA caching issues
+    VitePWA({
+      includeAssets: ['NUMZLOGO.png', 'apple-touch-icon-180x180.png'],
+      strategies: 'generateSW', // Generate service worker with workbox
+      // Enable service worker in development mode
+      // DISABLED: Service worker causes ERR_EMPTY_RESPONSE in dev mode
+      // Re-enable for production testing if needed
+      devOptions: {
+        enabled: false, // Disabled to prevent ERR_EMPTY_RESPONSE in development
+        type: 'module',
+        navigateFallback: 'index.html',
+      },
+      // Register service worker automatically
+      registerType: 'autoUpdate',
+      workbox: {
+        navigateFallbackDenylist: [/^\/api/],
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+        globPatterns: ['**/*.{js,css,html,woff,woff2,mp3,png,svg,ico}'],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+              },
+            },
+          },
+        ],
+        // Inject our custom push notification handlers
+        importScripts: ['/sw-push.js'], // Custom push notification handlers
+      },
+      manifest: {
+        short_name: 'NUMZTRAK',
+        name: 'NUMZTRAK - Professional Fleet Management',
+        description: 'Real-time fuel request management for fleet operations',
+        theme_color: '#0A2540',
+        background_color: '#ffffff',
+        display: 'standalone',
+        orientation: 'portrait-primary',
+        start_url: '/',
+        scope: '/',
+        icons: [
+          {
+            src: '/pwa-64x64.png',
+            sizes: '64x64',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+        ],
+        categories: ['business', 'productivity', 'utilities'],
+      },
+      // Disable manifest injection in HTML if commented out
+      injectManifest: false,
+    }),
     viteStaticCopy({
       targets: [
         { src: 'node_modules/@mapbox/mapbox-gl-rtl-text/dist/mapbox-gl-rtl-text.js', dest: '' },

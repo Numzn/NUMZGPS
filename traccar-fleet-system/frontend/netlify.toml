@@ -1,0 +1,102 @@
+# =========================================================================
+# NumzTrak Frontend Netlify Configuration
+# =========================================================================
+# Deployment configuration for domain sharing with Oracle Cloud backend
+# Frontend Domain: app.numz.site
+# Backend Domain: api.numz.site
+# =========================================================================
+
+[build]
+  # Build command
+  command = "npm run build"
+  
+  # Directory with built static files
+  publish = "dist"
+  
+  # Build environment
+  [build.environment]
+    NODE_VERSION = "18"
+    NPM_VERSION = "9"
+
+# =========================================================================
+# Custom Domain Configuration
+# =========================================================================
+[[domains]]
+  # Custom domain for the frontend
+  domain = "app.numz.site"
+
+# =========================================================================
+# Redirects and Rewrites
+# =========================================================================
+# SPA routing - all routes should serve index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# =========================================================================
+# Security Headers
+# =========================================================================
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Content Security Policy - Allow backend API calls
+    Content-Security-Policy = """
+      default-src 'self'; 
+      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://api.numz.site; 
+      style-src 'self' 'unsafe-inline'; 
+      img-src 'self' data: https: blob:; 
+      font-src 'self' data:; 
+      connect-src 'self' https://api.numz.site wss://api.numz.site ws://api.numz.site; 
+      media-src 'self'; 
+      object-src 'none'; 
+      child-src 'self'; 
+      worker-src 'self' blob:; 
+      frame-ancestors 'none'; 
+      base-uri 'self'; 
+      form-action 'self' https://api.numz.site;
+    """
+    
+    # Additional security headers
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+    
+    # CORS for API calls (backup to backend CORS)
+    Access-Control-Allow-Origin = "https://api.numz.site"
+    Access-Control-Allow-Credentials = "true"
+
+# =========================================================================
+# Environment-specific Settings
+# =========================================================================
+[context.production]
+  [context.production.environment]
+    NODE_ENV = "production"
+    VITE_API_BASE_URL = "https://api.numz.site"
+
+[context.branch-deploy]
+  [context.branch-deploy.environment]
+    NODE_ENV = "production"
+    VITE_API_BASE_URL = "https://api.numz.site"
+
+# =========================================================================
+# Build Settings
+# =========================================================================
+[build.processing]
+  skip_processing = false
+
+[build.processing.css]
+  bundle = true
+  minify = true
+
+[build.processing.js]
+  bundle = true
+  minify = true
+
+[build.processing.html]
+  pretty_urls = true
+
+[build.processing.images]
+  compress = true
