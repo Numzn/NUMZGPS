@@ -58,11 +58,11 @@
     # Content Security Policy - Allow backend API calls
     Content-Security-Policy = """
       default-src 'self'; 
-      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://api.numz.site; 
+      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://api.numz.site blob:; 
       style-src 'self' 'unsafe-inline'; 
       img-src 'self' data: https: blob:; 
       font-src 'self' data:; 
-      connect-src 'self' https://api.numz.site wss://api.numz.site ws://api.numz.site; 
+      connect-src 'self' https://api.numz.site wss://api.numz.site ws://api.numz.site https://tiles.openfreemap.org; 
       media-src 'self'; 
       object-src 'none'; 
       child-src 'self'; 
