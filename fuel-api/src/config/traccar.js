@@ -132,7 +132,10 @@ export const getTraccarUserBySessionToken = async (sessionToken) => {
     // For now, if we can't find the session, throw an error
     throw new Error(`Session token ${sessionToken} not found or invalid`);
   } catch (error) {
-    console.error('Error getting Traccar user by session token:', error);
+    // Only log as error if it's not a "not found" error, to reduce noise
+    if (process.env.NODE_ENV === 'development' && !error.message.includes('not found')) {
+      console.error('Error getting Traccar user by session token:', error);
+    }
     throw error;
   }
 };
