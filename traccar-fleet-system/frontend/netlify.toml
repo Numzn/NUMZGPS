@@ -33,13 +33,13 @@
 # API Proxy - Must come BEFORE SPA routing to take precedence
 [[redirects]]
   from = "/api/*"
-  to = "http://129.151.163.95:80/api/:splat"
+  to = "https://api.numz.site/api/:splat"
   status = 200
   force = true
   
 [[redirects]]
   from = "/socket.io/*"
-  to = "http://129.151.163.95:80/socket.io/:splat"
+  to = "https://api.numz.site/socket.io/:splat"
   status = 200
   force = true
 

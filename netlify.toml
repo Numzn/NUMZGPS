@@ -1,4 +1,8 @@
-# Netlify configuration for deploying only the frontend
+# =========================================================================
+# Netlify Configuration for NumzTrak Frontend
+# =========================================================================
+# Domain sharing: Frontend (app.numz.site) → Backend (api.numz.site)
+# =========================================================================
 
 [build]
   command = "npm install && npm run build"
@@ -10,7 +14,43 @@
   NODE_VERSION = "20"
   GIT_SUBMODULE_STRATEGY = "none"
 
+# =========================================================================
+# SPA Routing Support
+# =========================================================================
+# API Proxy - Redirect /api calls to HTTPS backend
+[[redirects]]
+  from = "/api/*"
+  to = "https://api.numz.site/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/socket.io/*"
+  to = "https://api.numz.site/socket.io/:splat"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
+# =========================================================================
+# Security Headers
+# =========================================================================
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Security headers
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    
+    # Cache static assets
+    Cache-Control = "public, max-age=31536000"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    # Don't cache HTML files
+    Cache-Control = "no-cache"
