@@ -14,6 +14,16 @@
 
 ---
 
+## Deployment Information (Oracle Cloud)
+- **Server IP:** `129.151.163.95`
+- **Active Directory:** `~/NUMZGPS/backend`
+- **Config Files:**
+  - Nginx: `~/NUMZGPS/backend/nginx/nginx-backend-only.conf`
+  - Docker Compose: `~/NUMZGPS/backend/docker-compose.backend-only.yml`
+- **SSL Certificates:** `/etc/letsencrypt/live/api.numz.site/`
+
+---
+
 ## Database Passwords
 
 ### PostgreSQL (Fuel Management)

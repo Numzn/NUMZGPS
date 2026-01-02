@@ -58,8 +58,12 @@ const SocketController = () => {
   }, [features, dispatch, soundEvents, soundAlarms]);
 
   const connectSocket = () => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const socket = new WebSocket(`${protocol}//${window.location.host}/api/socket`);
+    // Use configured API URL (from .env) or fallback to window location
+    // This ensures we connect directly to the backend for WebSockets, bypassing Netlify proxy
+    const apiBase = import.meta.env.VITE_API_BASE_URL || window.location.origin;
+    const wsUrl = apiBase.replace(/^http/, 'ws');
+    
+    const socket = new WebSocket(`${wsUrl}/api/socket`);
     socketRef.current = socket;
 
     socket.onopen = () => {

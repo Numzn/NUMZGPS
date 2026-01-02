@@ -78,9 +78,9 @@ const FuelSocketController = () => {
     // Always use same origin - Nginx proxies /socket.io/ to fuel-api
     // This ensures cookies and authentication work correctly
     const getFuelApiUrl = () => {
-      // Use same origin - Nginx will proxy /socket.io/ to fuel-api:3001
-      // This is the most reliable approach for both dev and production
-      return window.location.origin;
+      // Use configured API URL (from .env) or fallback to window location
+      // Direct connection avoids Netlify proxy issues with WebSockets
+      return import.meta.env.VITE_API_BASE_URL || window.location.origin;
     };
 
     const fuelApiUrl = getFuelApiUrl();
