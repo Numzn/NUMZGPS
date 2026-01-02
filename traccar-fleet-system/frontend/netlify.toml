@@ -30,7 +30,20 @@
 # =========================================================================
 # Redirects and Rewrites
 # =========================================================================
-# SPA routing - all routes should serve index.html
+# API Proxy - Must come BEFORE SPA routing to take precedence
+[[redirects]]
+  from = "/api/*"
+  to = "http://129.151.163.95:80/api/:splat"
+  status = 200
+  force = true
+  
+[[redirects]]
+  from = "/socket.io/*"
+  to = "http://129.151.163.95:80/socket.io/:splat"
+  status = 200
+  force = true
+
+# SPA routing - all other routes should serve index.html
 [[redirects]]
   from = "/*"
   to = "/index.html"
