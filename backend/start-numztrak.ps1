@@ -23,11 +23,11 @@ try {
 
 # Clean up any existing containers
 Write-Host "🧹 Cleaning up existing containers..." -ForegroundColor Yellow
-docker-compose down 2>$null
+docker-compose -f docker-compose.dev.yml down 2>$null
 
 # Start services
 Write-Host "🐳 Starting Docker services..." -ForegroundColor Cyan
-docker-compose up -d
+docker-compose -f docker-compose.dev.yml up -d
 
 # Wait for services to be healthy
 Write-Host "⏳ Waiting for services to be healthy..." -ForegroundColor Yellow

@@ -153,7 +153,7 @@ services:
       - '80:80'    # HTTP (redirects to HTTPS)
       - '443:443'  # HTTPS (production traffic)
     volumes:
-      - ./nginx/nginx-backend-only.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
       # Let's Encrypt SSL certificates (host paths on Oracle Cloud server)
       - /etc/letsencrypt/live/api.numz.site/fullchain.pem:/etc/ssl/certs/api.numz.site.crt:ro
       - /etc/letsencrypt/live/api.numz.site/privkey.pem:/etc/ssl/private/api.numz.site.key:ro
