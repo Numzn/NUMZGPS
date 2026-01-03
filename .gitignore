@@ -23,9 +23,8 @@ backend/key.pem
 backend/keystore.jks
 
 # Data directories (bind mounts - database data)
-data/
 backend/data/
-**/data/
+data/
 
 # Logs
 *.log
