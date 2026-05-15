@@ -1,6 +1,7 @@
 import { FuelRequest } from '../../models/index.js';
 import { emitDomainEvent } from '../../events/eventBus.js';
 import { EVENT_NAMES } from '../../events/eventNames.js';
+import { canFulfillFuelRequest } from '../authorization.js';
 
 /**
  * Mark fuel request as fulfilled
@@ -14,6 +15,11 @@ export const fulfillFuelRequest = async (req, res) => {
     if (!request) {
       console.error('❌ Fuel request not found:', id);
       return res.status(404).json({ error: 'Fuel request not found' });
+    }
+
+    if (!canFulfillFuelRequest(req.user, request)) {
+      console.error('❌ Forbidden - User', req.user?.id, 'cannot fulfill request owned by', request.userId);
+      return res.status(403).json({ error: 'Forbidden - Can only fulfill your own requests' });
     }
 
     if (request.status !== 'approved') {
