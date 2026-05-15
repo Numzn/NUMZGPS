@@ -2,6 +2,7 @@
  * WebSocket handler for real-time fuel request updates
  */
 import { validateSessionToken } from '../services/sessionService.js';
+import { canJoinRoom } from './roomAuthorization.js';
 
 const getSessionTokenFromCookieHeader = (cookieHeader) => {
   if (!cookieHeader || typeof cookieHeader !== 'string') {
@@ -112,6 +113,21 @@ export const initializeSocket = (io) => {
             const error = 'Invalid room name';
             if (isDev) {
               console.error(`❌ [Room] Invalid room name from ${socket.id}:`, roomName);
+            }
+            if (typeof callback === 'function') {
+              callback({ success: false, error });
+            }
+            return;
+          }
+
+          if (!canJoinRoom(socket.data, roomName)) {
+            const error = 'Not authorized to join room';
+            if (isDev) {
+              console.warn(`⚠️ [Room] Unauthorized room join from ${socket.id}:`, {
+                roomName,
+                userId: socket.data?.userId,
+                administrator: socket.data?.administrator,
+              });
             }
             if (typeof callback === 'function') {
               callback({ success: false, error });
