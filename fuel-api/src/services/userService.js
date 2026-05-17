@@ -119,6 +119,15 @@ export const getTraccarUser = async (userId) => {
 /**
  * Get user by session token (JSESSIONID)
  */
+export const getTraccarUserIdBySessionToken = async (pool, sessionToken) => {
+  const [sessionRows] = await pool.execute(
+    'SELECT userid FROM tc_user_sessions WHERE id = ? LIMIT 1',
+    [sessionToken]
+  );
+
+  return sessionRows.length > 0 ? sessionRows[0].userid : null;
+};
+
 export const getTraccarUserBySessionToken = async (sessionToken) => {
   try {
     if (!sessionToken) {
@@ -127,26 +136,18 @@ export const getTraccarUserBySessionToken = async (sessionToken) => {
     
     const pool = getTraccarPool();
     
-    // Approach 1: Check if session token is a user ID (for testing)
-    if (/^\d+$/.test(sessionToken)) {
-      const userId = parseInt(sessionToken);
-      return await getTraccarUser(userId);
-    }
-    
-    // Approach 2: Query tc_user_sessions table
+    // Validate the opaque JSESSIONID against Traccar's session table.
     try {
-      const [sessionRows] = await pool.execute(
-        'SELECT userid FROM tc_user_sessions WHERE id = ? LIMIT 1',
-        [sessionToken]
-      );
+      const userId = await getTraccarUserIdBySessionToken(pool, sessionToken);
       
-      if (sessionRows.length > 0) {
-        return await getTraccarUser(sessionRows[0].userid);
+      if (userId != null) {
+        return await getTraccarUser(userId);
       }
     } catch (sessionError) {
       if (authConfig.LOG_AUTH) {
         console.log('Session table query failed:', sessionError.message);
       }
+      throw sessionError;
     }
     
     // No valid session found
@@ -231,6 +232,7 @@ export const getTraccarDevice = async (deviceId) => {
 
 export default {
   getTraccarUser,
+  getTraccarUserIdBySessionToken,
   getTraccarUserBySessionToken,
   getTraccarUserBySessionViaAPI,
   getTraccarDevice,
