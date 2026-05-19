@@ -116,6 +116,15 @@ export const getTraccarUser = async (userId) => {
   }
 };
 
+export const lookupTraccarUserIdBySessionToken = async (sessionToken, pool) => {
+  const [sessionRows] = await pool.execute(
+    'SELECT userid FROM tc_user_sessions WHERE id = ? LIMIT 1',
+    [sessionToken]
+  );
+
+  return sessionRows.length > 0 ? sessionRows[0].userid : null;
+};
+
 /**
  * Get user by session token (JSESSIONID)
  */
@@ -127,21 +136,12 @@ export const getTraccarUserBySessionToken = async (sessionToken) => {
     
     const pool = getTraccarPool();
     
-    // Approach 1: Check if session token is a user ID (for testing)
-    if (/^\d+$/.test(sessionToken)) {
-      const userId = parseInt(sessionToken);
-      return await getTraccarUser(userId);
-    }
-    
-    // Approach 2: Query tc_user_sessions table
+    // Query Traccar's server-side session table. Never treat a cookie value as
+    // a user id; doing so would allow trivial user impersonation.
     try {
-      const [sessionRows] = await pool.execute(
-        'SELECT userid FROM tc_user_sessions WHERE id = ? LIMIT 1',
-        [sessionToken]
-      );
-      
-      if (sessionRows.length > 0) {
-        return await getTraccarUser(sessionRows[0].userid);
+      const userId = await lookupTraccarUserIdBySessionToken(sessionToken, pool);
+      if (userId != null) {
+        return await getTraccarUser(userId);
       }
     } catch (sessionError) {
       if (authConfig.LOG_AUTH) {
@@ -231,6 +231,7 @@ export const getTraccarDevice = async (deviceId) => {
 
 export default {
   getTraccarUser,
+  lookupTraccarUserIdBySessionToken,
   getTraccarUserBySessionToken,
   getTraccarUserBySessionViaAPI,
   getTraccarDevice,
