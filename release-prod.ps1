@@ -279,22 +279,30 @@ git fetch origin --prune --quiet
 git checkout __DEPLOY_COMMIT__
 
 echo ""
-echo "=== [2/7] Start databases ==="
+echo "=== [2/8] Start databases ==="
 cd ~/NUMZFLEET/backend
 compose up -d traccar-mysql fuel-postgres
 
 echo ""
-echo "=== [3/7] Start core backend services ==="
+echo "=== [3/8] Start core backend services ==="
 cd ~/NUMZFLEET/backend
 compose up -d --build traccar-server fuel-api
 
 echo ""
-echo "=== [4/7] Start ERB services ==="
+echo "=== [4/8] Apply fuel database migrations ==="
+for migration in "$HOME"/NUMZFLEET/fuel-api/migrations/*.sql; do
+  echo "Applying $(basename "$migration")"
+  docker exec -i numztrak-postgres psql -v ON_ERROR_STOP=1 -U numztrak -d numztrak_fuel < "$migration"
+done
+compose restart fuel-api
+
+echo ""
+echo "=== [5/8] Start ERB services ==="
 cd ~/NUMZFLEET/backend
 compose up -d --build erb-worker erb-api
 
 echo ""
-echo "=== [5/7] Build frontend from same commit ==="
+echo "=== [6/8] Build frontend from same commit ==="
 FRONT="$HOME/NUMZFLEET/traccar-fleet-system/frontend"
 cd "$FRONT"
 if command -v npm >/dev/null 2>&1; then
@@ -308,13 +316,13 @@ else
 fi
 
 echo ""
-echo "=== [6/7] Reload edge (pick up new static bundle + nginx config) ==="
+echo "=== [7/8] Reload edge (pick up new static bundle + nginx config) ==="
 cd ~/NUMZFLEET/backend
 compose up -d numztrak-nginx
 docker exec numztrak-nginx nginx -s reload 2>&1 || true
 
 echo ""
-echo "=== [7/7] Service status ==="
+echo "=== [8/8] Service status ==="
 cd ~/NUMZFLEET/backend
 compose ps
 

@@ -51,6 +51,7 @@ const OperationSessionsPage = () => {
 
   const currentSession = currentSessionId ? detailsMap[currentSessionId] : null;
   const currentRefuels = currentSession?.refuels || [];
+  const hasPreparedRefuels = currentRefuels.length > 0;
 
   const vehiclesByBudget = useMemo(() => buildVehicleBudgetIndex(vehicles), [vehicles]);
   const summarizedSessions = useMemo(
@@ -243,13 +244,33 @@ const OperationSessionsPage = () => {
                 onSelectSession={loadSessionDetails}
                 onSessionClosed={handleSessionClosed}
               />
-              <RefuelTable
-                sessionId={currentSessionId}
-                sessionStatus={currentSession?.status}
-                vehicles={vehicles}
-                selectedVehicleIds={[]}
-                onSubmitted={handleRefuelSubmitted}
-              />
+              {hasPreparedRefuels ? (
+                <Alert
+                  severity="info"
+                  action={
+                    currentSessionId ? (
+                      <Button
+                        color="inherit"
+                        size="small"
+                        onClick={() => navigate(`/fleet/operation-sessions/run/${currentSessionId}`)}
+                      >
+                        Resume run
+                      </Button>
+                    ) : null
+                  }
+                >
+                  This session already has prepared refuels. Use the run screen to update them so totals stay tied
+                  to one refuel per vehicle.
+                </Alert>
+              ) : (
+                <RefuelTable
+                  sessionId={currentSessionId}
+                  sessionStatus={currentSession?.status}
+                  vehicles={vehicles}
+                  selectedVehicleIds={[]}
+                  onSubmitted={handleRefuelSubmitted}
+                />
+              )}
             </>
           )}
         </Stack>
