@@ -127,6 +127,18 @@ function parseVehicleIds(vehicleIds) {
   return parseVehicleIdsInput(vehicleIds);
 }
 
+const activeSessionConflict = () => {
+  const error = new Error('Close the current active session before creating another');
+  error.statusCode = 409;
+  return error;
+};
+
+const isActiveSessionUniqueConstraintError = (error) => (
+  error?.name === 'SequelizeUniqueConstraintError'
+  || error?.parent?.constraint === 'idx_operation_sessions_one_active_per_user'
+  || error?.original?.constraint === 'idx_operation_sessions_one_active_per_user'
+);
+
 export async function listOperationSessions(user) {
   const rows = await listByUser(user);
 
@@ -134,7 +146,7 @@ export async function listOperationSessions(user) {
 }
 
 async function refreshSessionTotals(sessionId, transaction) {
-  const totals = await calculateSessionTotals(sessionId);
+  const totals = await calculateSessionTotals(sessionId, { transaction });
   totals.totalEstimatedFuel = Number(totals.totalEstimatedFuel.toFixed(2));
   totals.totalActualFuel = Number(totals.totalActualFuel.toFixed(2));
   totals.totalEstimatedCost = Number(totals.totalEstimatedCost.toFixed(2));
@@ -187,30 +199,35 @@ export async function createOperationSession(user, payload = {}) {
 
   const requestedVehicleIds = parseVehicleIds(payload.vehicleIds);
 
-  return sequelize.transaction(async (transaction) => {
-    if (requestedVehicleIds.length) {
-      const activeSession = await findActiveByUserId(user.id, { transaction });
-      if (activeSession) {
-        const error = new Error('Close the current active session before creating another');
-        error.statusCode = 409;
-        throw error;
+  try {
+    return await sequelize.transaction(async (transaction) => {
+      if (payload.status !== 'closed') {
+        const activeSession = await findActiveByUserId(user.id, { transaction });
+        if (activeSession) {
+          throw activeSessionConflict();
+        }
       }
+
+      const created = await createSessionRecord({
+        userId: user.id,
+        name: payload.name ? String(payload.name).trim() : null,
+        notes: payload.notes ? String(payload.notes).trim() : null,
+        status: payload.status === 'closed' ? 'closed' : 'active',
+        sessionDate,
+      }, { transaction });
+
+      if (requestedVehicleIds.length) {
+        await prepareInitialRefuels(user, created.id, requestedVehicleIds, transaction);
+      }
+
+      return toSessionDto(created);
+    });
+  } catch (error) {
+    if (isActiveSessionUniqueConstraintError(error)) {
+      throw activeSessionConflict();
     }
-
-    const created = await createSessionRecord({
-      userId: user.id,
-      name: payload.name ? String(payload.name).trim() : null,
-      notes: payload.notes ? String(payload.notes).trim() : null,
-      status: payload.status === 'closed' ? 'closed' : 'active',
-      sessionDate,
-    }, { transaction });
-
-    if (requestedVehicleIds.length) {
-      await prepareInitialRefuels(user, created.id, requestedVehicleIds, transaction);
-    }
-
-    return toSessionDto(created);
-  });
+    throw error;
+  }
 }
 
 export async function getOperationSessionDetails(user, sessionId) {
@@ -232,21 +249,21 @@ export async function getOperationSessionDetails(user, sessionId) {
 }
 
 export async function closeOperationSession(user, sessionId) {
-  const session = await findSessionById(sessionId);
-  assertCanAccessSession(session, user);
+  return sequelize.transaction(async (transaction) => {
+    const session = await findSessionById(sessionId, { transaction, lock: transaction.LOCK.UPDATE });
+    assertCanAccessSession(session, user);
 
-  if (session.status === 'closed') {
-    const error = new Error('Session is already closed');
-    error.statusCode = 400;
-    throw error;
-  }
+    if (session.status === 'closed') {
+      const error = new Error('Session is already closed');
+      error.statusCode = 400;
+      throw error;
+    }
 
-  await sequelize.transaction(async (transaction) => {
     await refreshSessionTotals(session.id, transaction);
     await updateManyBySessionId(session.id, { locked: true }, { transaction });
-    await updateSessionByInstance(session, { status: 'closed', totalsFrozenAt: new Date() }, { transaction });
+    const closed = await updateSessionByInstance(session, { status: 'closed', totalsFrozenAt: new Date() }, { transaction });
+    return toSessionDto(closed);
   });
-  return toSessionDto(session);
 }
 
 async function createLegacySessionRefuels(user, session, records = [], transaction) {
@@ -286,6 +303,25 @@ async function createLegacySessionRefuels(user, session, records = [], transacti
     };
   });
 
+  const requestedVehicleIds = new Set();
+  for (const record of sanitized) {
+    if (requestedVehicleIds.has(record.vehicleId)) {
+      const error = new Error(`Vehicle ${record.vehicleId} has more than one refuel in this payload`);
+      error.statusCode = 409;
+      throw error;
+    }
+    requestedVehicleIds.add(record.vehicleId);
+  }
+
+  const existingRefuels = await listBySessionId(session.id, { transaction, lock: transaction.LOCK.UPDATE });
+  const existingVehicleIds = new Set(existingRefuels.map((refuel) => Number(refuel.vehicleId)));
+  const duplicateVehicleId = sanitized.find((record) => existingVehicleIds.has(Number(record.vehicleId)))?.vehicleId;
+  if (duplicateVehicleId) {
+    const error = new Error(`Refuel already exists for vehicle ${duplicateVehicleId}; update the existing refuel instead`);
+    error.statusCode = 409;
+    throw error;
+  }
+
   const created = await bulkCreateRefuels(
     sanitized,
     { transaction, returning: true },
@@ -317,7 +353,7 @@ async function applySessionRefuelUpdates(user, session, updates = [], transactio
       throw error;
     }
 
-    const refuel = await findBySessionAndId(session.id, refuelId, { transaction });
+    const refuel = await findBySessionAndId(session.id, refuelId, { transaction, lock: transaction.LOCK.UPDATE });
     if (!refuel) {
       const error = new Error(`Refuel ${refuelId} not found in this session`);
       error.statusCode = 404;
@@ -426,16 +462,15 @@ async function applySessionRefuelUpdates(user, session, updates = [], transactio
 }
 
 export async function createSessionRefuels(user, sessionId, payload = {}) {
-  const session = await findSessionById(sessionId);
-  assertCanAccessSession(session, user);
-
-  assertSessionOpenForMutation(session);
-
   const hasRecords = Array.isArray(payload?.records);
   const hasUpdates = Array.isArray(payload?.updates);
   assertNotBothRecordsAndUpdates(hasRecords, hasUpdates);
 
   return sequelize.transaction(async (transaction) => {
+    const session = await findSessionById(sessionId, { transaction, lock: transaction.LOCK.UPDATE });
+    assertCanAccessSession(session, user);
+    assertSessionOpenForMutation(session);
+
     if (hasUpdates) {
       return applySessionRefuelUpdates(user, session, payload.updates, transaction);
     }

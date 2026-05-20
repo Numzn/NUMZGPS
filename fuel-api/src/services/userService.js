@@ -127,13 +127,8 @@ export const getTraccarUserBySessionToken = async (sessionToken) => {
     
     const pool = getTraccarPool();
     
-    // Approach 1: Check if session token is a user ID (for testing)
-    if (/^\d+$/.test(sessionToken)) {
-      const userId = parseInt(sessionToken);
-      return await getTraccarUser(userId);
-    }
-    
-    // Approach 2: Query tc_user_sessions table
+    // Query tc_user_sessions table. A JSESSIONID must be an actual Traccar
+    // session token; numeric user-id cookies would allow impersonation.
     try {
       const [sessionRows] = await pool.execute(
         'SELECT userid FROM tc_user_sessions WHERE id = ? LIMIT 1',
