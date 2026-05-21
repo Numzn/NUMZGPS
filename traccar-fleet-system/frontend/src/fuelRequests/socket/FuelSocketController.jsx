@@ -109,6 +109,7 @@ const FuelSocketController = () => {
         auth: {
           userId: user?.id,
           administrator: user?.administrator,
+          isManager: user?.isManager,
         },
       });
 
@@ -147,7 +148,7 @@ const FuelSocketController = () => {
       
       // Use reliable focus state from ref (updated via visibilitychange API)
       const isTabFocused = tabFocusStateRef.current;
-      const isManager = userRef.current?.administrator;
+      const isManager = !!(userRef.current?.administrator || userRef.current?.isManager);
       const isMyRequest = request.userId === userRef.current?.id;
       
       // For fuel-request-created: Only show to managers
@@ -248,7 +249,7 @@ const FuelSocketController = () => {
       
       dispatchRef.current(fuelRequestsActions.update([request]));
       
-      if (userRef.current?.administrator) {
+      if (userRef.current?.administrator || userRef.current?.isManager) {
         // Use smart notification system to prevent duplicates
         showSmartNotification(request, change, 'fuel-request-created');
       }
@@ -270,7 +271,7 @@ const FuelSocketController = () => {
         showSmartNotification(request, change, 'fuel-request-updated');
       } else {
         // Fallback for old format
-        if (!userRef.current?.administrator && request.userId === userRef.current?.id) {
+        if (!(userRef.current?.administrator || userRef.current?.isManager) && request.userId === userRef.current?.id) {
           if (showToastRef.current) {
             showToastRef.current('Your fuel request was updated', 'info', undefined, { skipPush: true });
           }
@@ -293,7 +294,7 @@ const FuelSocketController = () => {
           return;
         }
         
-        if (userRef.current?.administrator) {
+        if (userRef.current?.administrator || userRef.current?.isManager) {
           const room = 'managers';
           socket.emit('join-room', room, (response) => {
             if (!response) {
@@ -319,7 +320,7 @@ const FuelSocketController = () => {
           return;
         }
         
-        if (userRef.current?.administrator) {
+        if (userRef.current?.administrator || userRef.current?.isManager) {
           const room = 'managers';
           socket.emit('join-room', room, (response) => {
             if (!response) {
@@ -392,7 +393,7 @@ const FuelSocketController = () => {
       notificationTimeoutRef.current = {};
       shownNotificationsRef.current.clear();
     };
-  }, [authenticated, user?.id]);
+  }, [authenticated, user?.id, user?.administrator, user?.isManager]);
 
   // Render toast notifications only (popup notifications handled by FuelRequestsCard)
   return <ToastNotification />;

@@ -19,6 +19,23 @@ const getSessionTokenFromCookieHeader = (cookieHeader) => {
   return null;
 };
 
+export const canJoinRoom = (socketData = {}, roomName) => {
+  if (!roomName || typeof roomName !== 'string') {
+    return false;
+  }
+
+  if (roomName === 'managers') {
+    return !!socketData.isManager;
+  }
+
+  const driverRoomMatch = /^driver-(\d+)$/.exec(roomName);
+  if (driverRoomMatch) {
+    return String(socketData.userId) === driverRoomMatch[1];
+  }
+
+  return false;
+};
+
 export const initializeSocket = (io) => {
   const isDev = process.env.NODE_ENV === 'development';
   
@@ -37,9 +54,11 @@ export const initializeSocket = (io) => {
       if (user) {
         socket.data.userId = user.id || null;
         socket.data.administrator = !!user.administrator;
+        socket.data.isManager = !!(user.administrator || user.isManager);
       } else {
         socket.data.userId = null;
         socket.data.administrator = false;
+        socket.data.isManager = false;
       }
 
       if (!user && isDev) {
@@ -55,6 +74,7 @@ export const initializeSocket = (io) => {
       socket.data = socket.data || {};
       socket.data.userId = null;
       socket.data.administrator = false;
+      socket.data.isManager = false;
       next();
     }
   });
@@ -68,11 +88,13 @@ export const initializeSocket = (io) => {
       
       const userId = socket.data?.userId;
       const isAdministrator = socket.data?.administrator || false;
+      const isManager = socket.data?.isManager || false;
       
       if (isDev) {
         console.log(`✅ [Socket] Client connected: ${socket.id}`, {
           userId,
           administrator: isAdministrator,
+          isManager,
           handshake: {
             auth: socket.handshake.auth,
             headers: Object.keys(socket.handshake.headers),
@@ -82,7 +104,7 @@ export const initializeSocket = (io) => {
 
       // ========== Auto-join rooms with error handling ==========
       try {
-        if (isAdministrator) {
+        if (isManager) {
           socket.join('managers');
           if (isDev) {
             console.log(`✅ [Socket] ${socket.id} joined managers room`);
@@ -119,6 +141,24 @@ export const initializeSocket = (io) => {
             return;
           }
           
+          if (!canJoinRoom(socket.data, roomName)) {
+            const error = 'Not authorized to join room';
+            if (isDev) {
+              console.warn(`⚠️ [Room] Unauthorized room join from ${socket.id}:`, roomName);
+            }
+            if (typeof callback === 'function') {
+              callback({ success: false, error });
+            }
+            socket.emit('room-joined', {
+              success: false,
+              room: roomName,
+              error,
+              socketId: socket.id,
+              timestamp: new Date().toISOString()
+            });
+            return;
+          }
+
           socket.join(roomName);
           
           // Send acknowledgment if callback provided
@@ -174,7 +214,8 @@ export const initializeSocket = (io) => {
           console.log(`🔌 [Socket] Client disconnected: ${socket.id}`, {
             reason,
             userId,
-            administrator: isAdministrator
+            administrator: isAdministrator,
+            isManager
           });
         }
       });
@@ -188,6 +229,7 @@ export const initializeSocket = (io) => {
         name: error.name,
         userId: socket.data?.userId,
         administrator: socket.data?.administrator,
+        isManager: socket.data?.isManager,
       });
       
       // Emit error to client before disconnecting

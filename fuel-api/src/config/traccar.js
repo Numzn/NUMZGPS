@@ -97,18 +97,8 @@ export const getTraccarUserBySessionToken = async (sessionToken) => {
   try {
     const pool = getTraccarPool();
     
-    // Traccar stores sessions - we need to find the user ID from the session
-    // The session token format can vary, so we'll try multiple approaches
-    
-    // Approach 1: Check if session token is a user ID (for development/testing)
-    // Some setups use user ID directly as session token
-    if (/^\d+$/.test(sessionToken)) {
-      const userId = parseInt(sessionToken);
-      return await getTraccarUser(userId);
-    }
-    
-    // Approach 2: Query tc_user_sessions table if it exists
-    // Note: Traccar's session storage may vary by version
+    // Traccar stores sessions in tc_user_sessions; the cookie value must not be
+    // treated as a user id.
     try {
       const [sessionRows] = await pool.execute(
         'SELECT userid FROM tc_user_sessions WHERE id = ? LIMIT 1',
@@ -124,12 +114,6 @@ export const getTraccarUserBySessionToken = async (sessionToken) => {
         console.log('Session table query failed, trying alternative method:', sessionError.message);
       }
     }
-    
-    // Approach 3: For Traccar, we can also validate by making an API call to Traccar
-    // But for now, we'll use a fallback: try to get user from Traccar API
-    // This requires the session to be valid in Traccar
-    
-    // For now, if we can't find the session, throw an error
     throw new Error(`Session token ${sessionToken} not found or invalid`);
   } catch (error) {
     // Only log as error if it's not a "not found" error, to reduce noise
