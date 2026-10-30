@@ -164,3 +164,66 @@ A single Google identity may eventually belong to multiple companies. Company sw
 - Initial platform-owner bootstrap identity and recovery procedure.
 
 These values must be supplied through deployment secrets/environment configuration, never committed to the repository.
+
+
+## Product clarification: device-first direct customer onboarding
+
+NUMZFLEET is sold and provisioned directly by NUMZ. The normal customer journey is initiated by NUMZ during GPS installation, not by a customer creating an empty account first.
+
+### Primary flow: NUMZ provisions the customer and device
+
+1. NUMZ operator captures the customer's email address (and optional name/contact details) during the sale/installation.
+2. NUMZ operator registers/claims the physical GPS in the fleet platform and verifies its device identity/IMEI and telemetry association.
+3. In one controlled provisioning workflow, the backend creates or reuses a provisional customer/workspace record and creates a pending device assignment to that customer. The device can report telemetry immediately, but customer access is not granted yet.
+4. Backend creates a cryptographically random, single-use, expiring invitation/claim token. Store only a secure hash of the token. Bind the invitation to the provisional customer, intended email, and the specific onboarding context.
+5. Send the customer an email and/or SMS with a secure completion link. The message explains that NUMZ has installed and connected their GPS and invites them to finish account setup.
+6. Customer opens the link and chooses Continue with Google.
+7. Backend validates the invitation token, Google OAuth state/nonce, Google issuer/audience/signature/expiry and verified-email claim. The normalized verified Google email must match the intended email on the invitation. Do not automatically merge records based only on a matching unverified email.
+8. Backend atomically consumes the invitation, links the Google `sub` to the existing provisional user, activates the appropriate membership/customer account, and retains the pre-existing device assignment.
+9. Customer reviews the Google-supplied profile information and adds any missing details requested by NUMZ (e.g. phone number, business/customer display name, vehicle details). Google profile scopes should remain minimal; do not imply Google provides phone, address or company data unless explicitly consented and actually returned.
+10. Customer lands in NUMZFLEET and sees the already-linked vehicle/device.
+
+### Customer lifecycle
+
+Use explicit, separate states rather than treating a pre-created record as a fully authenticated account:
+
+- `provisioned`: customer/workspace record exists and NUMZ has initiated provisioning.
+- `registration_pending`: invitation has been sent; identity has not yet been claimed.
+- `active`: customer has completed identity verification and required onboarding.
+- `invitation_expired`: claim link expired; NUMZ can safely resend/reissue.
+- `suspended`: access has been disabled by an authorized operator.
+- `rejected` or `cancelled`: provisioning was declined/cancelled with an auditable reason.
+
+The device's operational/telemetry state is independent from the customer's account state. A tracker may be online and assigned to a provisioned customer while the customer's login remains unavailable until claim completion.
+
+### Data model implications
+
+- A provisional customer/workspace must be representable before a Google identity exists. Do not require a Google user row to create the customer record.
+- Model `customers` (or the company/workspace record), `users`, `customer_memberships`, `device_assignments` and `onboarding_invitations` as distinct relationships.
+- The invitation should point to the intended customer/workspace and intended email. It must not itself grant general API access.
+- Device assignment should be recorded as a durable, auditable relationship with assignment status and effective timestamps. Do not encode customer ownership solely in a mutable device label or Traccar user ID.
+- Provisioning must be idempotent: retrying an operator action must not create duplicate customers, invitations or assignments. Require explicit resolution when a device is already assigned elsewhere.
+- Reassignments, duplicate email addresses, shared family/business accounts and customers with multiple vehicles must be handled explicitly.
+- Customer activation and invitation consumption must be transactional. If any part fails, the system must not leave an invitation consumed without a usable identity/membership, or silently detach the device.
+- Existing accounts remain intact. When provisioning for an email that already belongs to an existing verified customer, require an explicit, audited attach-device action rather than creating a duplicate identity or silently merging accounts.
+
+### Secondary flow: customer self-registration
+
+The original self-registration decision remains supported. A customer may independently register and submit a company/customer application. This is a separate entry point and follows the configured platform approval policy. It does not replace or bypass the NUMZ-initiated device-first flow.
+
+### Operational roles and delegated approval
+
+- NUMZ operator: may provision a customer and register/assign devices within the operator's granted scope.
+- Platform owner/delegated platform administrator: may approve customer/company applications and manage delegated authority.
+- Customer owner: may manage their own workspace and invite additional customer users according to role policy.
+- Device assignment and platform approval are distinct permissions. An operator installing a GPS does not automatically gain platform-owner authority.
+
+### Revised acceptance criteria
+
+- NUMZ can provision a customer and link an installed GPS before the customer has a Google identity.
+- A provisioned customer cannot access fleet data before successfully claiming the invitation and receiving an active membership.
+- The invitation is single-use, expires, is securely stored, is email-bound and is consumed atomically.
+- Successful Google completion claims the existing provisional record; it does not create a duplicate customer or lose the linked GPS.
+- Google only supplies the profile fields actually granted and returned; additional information is collected directly from the customer.
+- Customer status and GPS telemetry/assignment status remain independent.
+- Repeated provisioning is idempotent and device conflicts require explicit resolution.
